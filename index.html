@@ -70,6 +70,7 @@
       margin-bottom: 10px; font-size: 13px; font-weight: 600; color: #065f46;
     }
     .signin-record .ts { font-weight: 400; color: #047857; }
+    .proxy-badge { background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
 
     /* Buttons */
     .btn-sm { padding: 6px 12px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; }
@@ -500,7 +501,7 @@ function renderToday(){
     const time=s.time_start?(s.time_end?`${s.time_start} – ${s.time_end}`:s.time_start):'時間未定';
 
     const signinBlock = s.signed_in_at
-      ? `<div class="signin-record">✅ 電子簽到完成 <span class="ts">${fmtTime(s.signed_in_at)}</span></div>`
+      ? `<div class="signin-record">✅ ${s.signed_in_by==='proxy'?'<span class="proxy-badge">代簽</span> ':''}簽到完成 <span class="ts">${fmtTime(s.signed_in_at)}</span></div>`
       : '';
 
     const actions = s.status==='scheduled'
@@ -531,7 +532,7 @@ async function signIn(id){
   if(!s) return;
   const now=new Date().toISOString();
   showLoading(true);
-  const {error}=await db.from('gym_sessions').update({signed_in_at:now, status:'completed'}).eq('id',id);
+  const {error}=await db.from('gym_sessions').update({signed_in_at:now, status:'completed', signed_in_by:'proxy'}).eq('id',id);
   if(!error){
     s.signed_in_at=now; s.status='completed';
     const pkg=getActivePkg(s.student_id);
@@ -603,7 +604,7 @@ function renderSchedule(){
     const stu=getStudent(s.student_id),ven=getVenue(s.venue_id);
     const d=new Date(s.date+'T00:00:00');
     const time=s.time_start?(s.time_end?`${s.time_start}–${s.time_end}`:s.time_start):'—';
-    const signinNote=s.signed_in_at?`<div style="font-size:11px;color:#059669;margin-top:2px">✅ 已簽到 ${fmtTime(s.signed_in_at)}</div>`:'';
+    const signinNote=s.signed_in_at?`<div style="font-size:11px;color:#059669;margin-top:2px">✅ ${s.signed_in_by==='proxy'?'<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-right:3px">代簽</span>':''}已簽到 ${fmtTime(s.signed_in_at)}</div>`:'';
     return `<div class="schedule-row">
       <div class="sched-date"><div class="sched-day">${d.getDate()}</div><div class="sched-month">${months[d.getMonth()]}</div></div>
       <div class="sched-divider"></div>
@@ -879,7 +880,7 @@ async function revertSession(id){
   const s=sessions.find(x=>x.id===id);if(!s)return;
   const wasCompleted=s.status==='completed';
   showLoading(true);
-  const {error}=await db.from('gym_sessions').update({status:'scheduled',signed_in_at:null}).eq('id',id);
+  const {error}=await db.from('gym_sessions').update({status:'scheduled',signed_in_at:null,signed_in_by:null}).eq('id',id);
   if(!error){
     s.status='scheduled';s.signed_in_at=null;
     if(wasCompleted){

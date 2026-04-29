@@ -176,7 +176,7 @@ async function confirmSignin() {
 
   const now = new Date().toISOString();
   const { error } = await db.from('gym_sessions')
-    .update({ signed_in_at: now, status: 'completed' })
+    .update({ signed_in_at: now, status: 'completed', signed_in_by: 'self' })
     .eq('id', sessionData.id);
 
   if (error) {
