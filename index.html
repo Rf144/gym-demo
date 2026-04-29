@@ -493,7 +493,8 @@ function renderToday(){
          <button class="btn-sm btn-warn" onclick="cancelSession('${s.id}')">✕ 取消</button>
          <button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
          <button class="btn-sm btn-muted" onclick="deleteSession('${s.id}')">刪除</button>`
-      : `<button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
+      : `<button class="btn-sm btn-orange" onclick="revertSession('${s.id}')">↩ 回復待上課</button>
+         <button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
          <button class="btn-sm btn-muted" onclick="deleteSession('${s.id}')">刪除</button>`;
 
     return `<div class="session-card" data-status="${s.status}">
@@ -599,7 +600,8 @@ function renderSchedule(){
       </div>
       <div class="sched-right">
         <span class="badge ${sBadge[s.status]||''}">${sLabel[s.status]||s.status}</span>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${s.status!=='scheduled'?`<button class="btn-sm btn-orange" onclick="revertSession('${s.id}')">↩ 復原</button>`:''}
           <button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
           <button class="btn-sm btn-muted" onclick="deleteSession('${s.id}')">刪除</button>
         </div>
@@ -831,6 +833,33 @@ async function savePackage(){
   const {error}=await db.from('gym_packages').insert({id,...data});
   if(!error){packages.push({id,...data});toast('購課記錄已新增');}
   showLoading(false);closeModal('modal-package');renderAll();
+}
+
+// ── Revert session ──
+async function revertSession(id){
+  const s=sessions.find(x=>x.id===id);if(!s)return;
+  const wasCompleted=s.status==='completed';
+  showLoading(true);
+  const {error}=await db.from('gym_sessions').update({status:'scheduled',signed_in_at:null}).eq('id',id);
+  if(!error){
+    s.status='scheduled';s.signed_in_at=null;
+    if(wasCompleted){
+      // 歸還堂數：找最新一筆堂數包，remaining+1（不超過 total）
+      const pkg=packages.filter(p=>p.student_id===s.student_id)
+        .sort((a,b)=>new Date(b.purchase_date)-new Date(a.purchase_date))[0];
+      if(pkg && pkg.remaining_sessions<pkg.total_sessions){
+        const newR=pkg.remaining_sessions+1;
+        await db.from('gym_packages').update({remaining_sessions:newR}).eq('id',pkg.id);
+        pkg.remaining_sessions=newR;
+        toast('已復原為待上課，堂數已歸還');
+      } else {
+        toast('已復原為待上課');
+      }
+    } else {
+      toast('已復原為待上課');
+    }
+  }
+  showLoading(false);renderAll();
 }
 
 // ── Misc ──
