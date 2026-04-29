@@ -533,8 +533,9 @@ async function signIn(id){
   const now=new Date().toISOString();
   showLoading(true);
   const {error}=await db.from('gym_sessions').update({signed_in_at:now, status:'completed', signed_in_by:'proxy'}).eq('id',id);
+  if(error){ toast('❌ 簽到失敗，請重試'); showLoading(false); return; }
   if(!error){
-    s.signed_in_at=now; s.status='completed';
+    s.signed_in_at=now; s.status='completed'; s.signed_in_by='proxy';
     const pkg=getActivePkg(s.student_id);
     if(pkg){
       const newR=pkg.remaining_sessions-1;
