@@ -644,7 +644,10 @@ function renderParttime(){
     const actionBtns= p.status==='pending'
       ? `<button class="btn-sm btn-orange" onclick="updatePtStatus('${p.id}','requested')">送出請款</button>`
       : p.status==='requested'
-      ? `<button class="btn-sm btn-green" onclick="updatePtStatus('${p.id}','received')">確認收款</button>`
+      ? `<button class="btn-sm btn-green" onclick="updatePtStatus('${p.id}','received')">確認收款</button>
+         <button class="btn-sm btn-muted" onclick="updatePtStatus('${p.id}','pending')">↩ 回復待請款</button>`
+      : p.status==='received'
+      ? `<button class="btn-sm btn-muted" onclick="updatePtStatus('${p.id}','requested')">↩ 回復已請款</button>`
       : '';
     return `<div class="pt-row">
       <div class="pt-date"><div class="pt-day">${d.getDate()}</div><div class="pt-month">${months[d.getMonth()]}</div></div>
