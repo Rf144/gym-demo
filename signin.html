@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>課堂簽到</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: white; border-radius: 24px; padding: 40px 32px;
+      width: 100%; max-width: 360px; text-align: center;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+    }
+    .logo { font-size: 52px; margin-bottom: 8px; }
+    .title { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 28px; }
+
+    .info-box {
+      background: #f8fafc; border-radius: 14px; padding: 20px;
+      margin-bottom: 28px; text-align: left;
+    }
+    .info-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+    .info-row:last-child { margin-bottom: 0; }
+    .info-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .info-text { font-size: 15px; font-weight: 600; color: #1e293b; line-height: 1.4; }
+    .info-sub { font-size: 13px; color: #94a3b8; }
+
+    .btn-signin {
+      width: 100%; padding: 18px; background: #10b981; color: white;
+      border: none; border-radius: 14px; font-size: 18px; font-weight: 800;
+      cursor: pointer; letter-spacing: 1px; transition: all 0.2s;
+      box-shadow: 0 4px 20px rgba(16,185,129,0.4);
+    }
+    .btn-signin:hover { background: #059669; transform: translateY(-1px); }
+    .btn-signin:active { transform: translateY(0); }
+    .btn-signin:disabled { background: #94a3b8; cursor: default; transform: none; box-shadow: none; }
+
+    /* Success */
+    .success-box { display: none; }
+    .success-icon { font-size: 72px; margin-bottom: 16px; }
+    .success-title { font-size: 24px; font-weight: 800; color: #10b981; margin-bottom: 8px; }
+    .success-time { font-size: 15px; color: #64748b; }
+
+    /* Error */
+    .error-box { display: none; }
+    .error-icon { font-size: 52px; margin-bottom: 12px; }
+    .error-msg { font-size: 16px; color: #ef4444; font-weight: 600; margin-bottom: 8px; }
+    .error-sub { font-size: 14px; color: #94a3b8; }
+
+    /* Loading */
+    .spinner {
+      width: 36px; height: 36px; border: 4px solid #e2e8f0;
+      border-top-color: #10b981; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 24px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .already-box {
+      background: #f0fdf4; border-radius: 12px; padding: 16px;
+      margin-bottom: 20px; display: none;
+    }
+    .already-text { font-size: 14px; color: #065f46; font-weight: 600; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <!-- Loading state -->
+  <div id="state-loading">
+    <div class="logo">💪</div>
+    <div class="title">載入課堂資訊…</div>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Sign-in state -->
+  <div id="state-signin" style="display:none">
+    <div class="logo">💪</div>
+    <div class="title">課堂簽到</div>
+    <div class="subtitle">請確認以下課堂資訊後完成簽到</div>
+    <div class="info-box" id="session-info"></div>
+    <div class="already-box" id="already-box">
+      <div class="already-text" id="already-text"></div>
+    </div>
+    <button class="btn-signin" id="btn-confirm" onclick="confirmSignin()">確認簽到</button>
+  </div>
+
+  <!-- Success state -->
+  <div id="state-success" class="success-box">
+    <div class="success-icon">✅</div>
+    <div class="success-title">簽到成功！</div>
+    <div class="success-time" id="success-time"></div>
+    <div style="margin-top:20px;font-size:13px;color:#94a3b8">可以關閉此頁面</div>
+  </div>
+
+  <!-- Error state -->
+  <div id="state-error" class="error-box">
+    <div class="error-icon">⚠️</div>
+    <div class="error-msg" id="error-msg">找不到此課堂</div>
+    <div class="error-sub">請向教練確認簽到 QR Code 是否正確</div>
+  </div>
+</div>
+
+<script>
+const { createClient } = supabase;
+const db = createClient(
+  'https://pstobgspnvxvpcwmdfkv.supabase.co',
+  'sb_publishable_ltCisjrJufmCwWqfo5PHTQ_mSYqCtpf'
+);
+
+const show = id => {
+  ['state-loading','state-signin','state-success','state-error']
+    .forEach(s => document.getElementById(s).style.display = s === id ? 'block' : 'none');
+};
+
+const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const days   = ['日','一','二','三','四','五','六'];
+
+let sessionData = null;
+
+async function init() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if (!id) { showError('缺少課堂 ID'); return; }
+
+  const { data: ses, error: sesErr } = await db
+    .from('gym_sessions').select('*').eq('id', id).single();
+  if (sesErr || !ses) { showError('找不到此課堂'); return; }
+
+  const { data: stu } = await db
+    .from('gym_students').select('name').eq('id', ses.student_id).single();
+  const { data: ven } = await db
+    .from('gym_venues').select('name,address').eq('id', ses.venue_id).single();
+
+  sessionData = ses;
+
+  const d = new Date(ses.date + 'T00:00:00');
+  const dateStr = `${d.getMonth()+1}月${d.getDate()}日（週${days[d.getDay()]}）`;
+  const timeStr = ses.time_start ? (ses.time_end ? `${ses.time_start} – ${ses.time_end}` : ses.time_start) : '時間未定';
+
+  document.getElementById('session-info').innerHTML = `
+    <div class="info-row"><div class="info-icon">👤</div><div><div class="info-text">${esc(stu?.name||'學員')}</div></div></div>
+    <div class="info-row"><div class="info-icon">📅</div><div><div class="info-text">${dateStr}</div></div></div>
+    <div class="info-row"><div class="info-icon">⏰</div><div><div class="info-text">${timeStr}</div></div></div>
+    <div class="info-row"><div class="info-icon">📍</div><div><div class="info-text">${esc(ven?.name||'教室未設定')}</div><div class="info-sub">${esc(ven?.address||'')}</div></div></div>
+  `;
+
+  // Already signed in
+  if (ses.signed_in_at) {
+    const t = new Date(ses.signed_in_at);
+    document.getElementById('already-box').style.display = 'block';
+    document.getElementById('already-text').textContent =
+      `已於 ${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')} 完成簽到`;
+    document.getElementById('btn-confirm').textContent = '已完成簽到';
+    document.getElementById('btn-confirm').disabled = true;
+  }
+
+  // Cancelled session
+  if (ses.status === 'cancelled') {
+    showError('此課堂已取消');
+    return;
+  }
+
+  show('state-signin');
+}
+
+async function confirmSignin() {
+  const btn = document.getElementById('btn-confirm');
+  btn.disabled = true;
+  btn.textContent = '簽到中…';
+
+  const now = new Date().toISOString();
+  const { error } = await db.from('gym_sessions')
+    .update({ signed_in_at: now, status: 'completed' })
+    .eq('id', sessionData.id);
+
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = '確認簽到';
+    alert('簽到失敗，請重試');
+    return;
+  }
+
+  // Deduct package
+  const { data: pkgs } = await db.from('gym_packages')
+    .select('*')
+    .eq('student_id', sessionData.student_id)
+    .gt('remaining_sessions', 0)
+    .order('purchase_date', { ascending: false })
+    .limit(1);
+  if (pkgs && pkgs.length > 0) {
+    await db.from('gym_packages')
+      .update({ remaining_sessions: pkgs[0].remaining_sessions - 1 })
+      .eq('id', pkgs[0].id);
+  }
+
+  const t = new Date(now);
+  document.getElementById('success-time').textContent =
+    `簽到時間：${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}:${t.getSeconds().toString().padStart(2,'0')}`;
+  show('state-success');
+}
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  show('state-error');
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+init();
+</script>
+</body>
+</html>

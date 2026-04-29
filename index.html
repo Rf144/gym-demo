@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>健身教練管理系統</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
@@ -293,6 +294,21 @@
   </div>
 </main>
 
+<!-- QR Modal -->
+<div class="modal-overlay" id="modal-qr">
+  <div class="modal" style="text-align:center;max-width:340px">
+    <h2 id="qr-title">課堂簽到 QR Code</h2>
+    <p id="qr-subtitle" style="font-size:13px;color:#64748b;margin-bottom:20px"></p>
+    <div style="background:#f8fafc;border-radius:16px;padding:24px;display:inline-block;margin-bottom:16px">
+      <canvas id="qr-canvas"></canvas>
+    </div>
+    <p style="font-size:13px;color:#94a3b8;margin-bottom:20px">請學員掃描此 QR Code 完成電子簽到</p>
+    <div style="display:flex;gap:10px">
+      <button class="btn-cancel-modal" onclick="closeModal('modal-qr')" style="flex:1">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- Session Modal -->
 <div class="modal-overlay" id="modal-session">
   <div class="modal">
@@ -488,8 +504,8 @@ function renderToday(){
       : '';
 
     const actions = s.status==='scheduled'
-      ? `${!s.signed_in_at?`<button class="btn-sm btn-signin" onclick="signIn('${s.id}')">📝 學員簽到</button>`:''}
-         <button class="btn-sm btn-complete" onclick="completeSession('${s.id}')">✓ 標記完成</button>
+      ? `<button class="btn-sm btn-signin" onclick="showQR('${s.id}')">📷 QR 簽到</button>
+         ${!s.signed_in_at?`<button class="btn-sm btn-complete" onclick="signIn('${s.id}')">✓ 代為簽到</button>`:''}
          <button class="btn-sm btn-warn" onclick="cancelSession('${s.id}')">✕ 取消</button>
          <button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
          <button class="btn-sm btn-muted" onclick="deleteSession('${s.id}')">刪除</button>`
@@ -833,6 +849,26 @@ async function savePackage(){
   const {error}=await db.from('gym_packages').insert({id,...data});
   if(!error){packages.push({id,...data});toast('購課記錄已新增');}
   showLoading(false);closeModal('modal-package');renderAll();
+}
+
+// ── QR Code ──
+function showQR(id){
+  const s=sessions.find(x=>x.id===id);
+  if(!s) return;
+  const stu=getStudent(s.student_id);
+  const time=s.time_start?(s.time_end?`${s.time_start}–${s.time_end}`:s.time_start):'';
+  $('qr-title').textContent='課堂簽到 QR Code';
+  $('qr-subtitle').textContent=`${stu?.name||'學員'} · ${s.date} ${time}`;
+  const url=`${location.origin}/signin.html?id=${id}`;
+  new QRious({
+    element: $('qr-canvas'),
+    value: url,
+    size: 220,
+    background: 'white',
+    foreground: '#0f172a',
+    level: 'H'
+  });
+  $('modal-qr').classList.add('show');
 }
 
 // ── Revert session ──
