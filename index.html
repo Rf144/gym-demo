@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>健身教練管理系統</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: white; padding: 16px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-logo { font-size: 28px; }
+    header h1 { font-size: 20px; letter-spacing: 1px; }
+    .header-sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .header-date { font-size: 13px; color: #94a3b8; }
+
+    .stats-bar {
+      background: white; border-bottom: 1px solid #e2e8f0;
+      display: flex; overflow-x: auto;
+    }
+    .stat-item {
+      padding: 16px 32px; text-align: center;
+      border-right: 1px solid #e2e8f0; min-width: 130px; flex-shrink: 0;
+    }
+    .stat-num { font-size: 30px; font-weight: 800; color: #f97316; }
+    .stat-label { font-size: 12px; color: #64748b; margin-top: 3px; }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+
+    .tabs {
+      display: flex; gap: 4px; margin-bottom: 20px;
+      background: white; border-radius: 12px; padding: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .tab-btn {
+      flex: 1; padding: 10px 16px; border: none; border-radius: 8px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      background: transparent; color: #64748b; transition: all 0.2s;
+    }
+    .tab-btn.active { background: #f97316; color: white; }
+    .tab-btn:hover:not(.active) { background: #f1f5f9; }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+    }
+    .section-title { font-size: 18px; font-weight: 700; }
+    .btn-primary {
+      padding: 10px 20px; background: #f97316; color: white;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .btn-primary:hover { background: #ea6c0a; }
+
+    /* Today sessions */
+    .session-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #94a3b8; }
+    .empty-state .icon { font-size: 52px; margin-bottom: 14px; }
+    .empty-state p { font-size: 15px; }
+
+    .session-card {
+      background: white; border-radius: 12px; padding: 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border-left: 4px solid #e2e8f0; transition: transform 0.15s;
+    }
+    .session-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+    .session-card[data-status="scheduled"] { border-left-color: #f97316; }
+    .session-card[data-status="completed"] { border-left-color: #10b981; background: #f0fdf4; }
+    .session-card[data-status="cancelled"] { border-left-color: #94a3b8; background: #f8fafc; opacity: 0.7; }
+
+    .session-time { font-size: 24px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
+    .session-student { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .session-venue { font-size: 13px; color: #64748b; margin-bottom: 10px; }
+    .session-note { font-size: 13px; color: #475569; margin-bottom: 12px; line-height: 1.5; }
+
+    .btn-sm {
+      padding: 6px 12px; border: none; border-radius: 6px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .btn-complete { background: #d1fae5; color: #065f46; }
+    .btn-complete:hover { background: #a7f3d0; }
+    .btn-warn { background: #fee2e2; color: #991b1b; }
+    .btn-warn:hover { background: #fecaca; }
+    .btn-info { background: #e0f2fe; color: #0369a1; }
+    .btn-info:hover { background: #bae6fd; }
+    .btn-muted { background: #f1f5f9; color: #64748b; }
+    .btn-muted:hover { background: #e2e8f0; }
+
+    .session-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+    .badge {
+      display: inline-block; font-size: 11px;
+      padding: 3px 9px; border-radius: 99px; font-weight: 600;
+    }
+    .badge-scheduled { background: #fff7ed; color: #c2410c; }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-cancelled { background: #f1f5f9; color: #64748b; }
+
+    /* Student cards */
+    .student-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+    .student-card {
+      background: white; border-radius: 12px; padding: 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      transition: transform 0.15s; position: relative;
+    }
+    .student-card:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+    .student-card.card-danger { border: 1.5px solid #f87171; }
+    .student-card.card-warning { border: 1.5px solid #fbbf24; }
+
+    .corner-badge {
+      position: absolute; top: 12px; right: 12px;
+      font-size: 11px; padding: 3px 9px; border-radius: 99px; font-weight: 600;
+    }
+    .corner-unpaid { background: #fee2e2; color: #991b1b; }
+    .corner-low { background: #fff7ed; color: #c2410c; }
+
+    .student-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .student-phone { font-size: 13px; color: #64748b; }
+    .student-line { font-size: 13px; color: #059669; margin-top: 2px; }
+
+    .pkg-box {
+      background: #f8fafc; border-radius: 8px; padding: 10px 14px;
+      margin: 12px 0; display: flex; align-items: center; justify-content: space-between;
+    }
+    .pkg-remaining { font-size: 22px; font-weight: 800; color: #f97316; }
+    .pkg-total { font-size: 12px; color: #94a3b8; }
+    .pkg-paid-badge { font-size: 12px; padding: 4px 10px; border-radius: 99px; font-weight: 600; }
+    .paid-yes { background: #d1fae5; color: #065f46; }
+    .paid-no { background: #fee2e2; color: #991b1b; }
+    .pkg-none { justify-content: center; color: #94a3b8; font-size: 13px; }
+
+    .student-note { font-size: 13px; color: #475569; line-height: 1.5; margin-bottom: 10px; }
+
+    /* Schedule list */
+    .schedule-list { display: flex; flex-direction: column; gap: 10px; }
+    .schedule-row {
+      background: white; border-radius: 10px; padding: 14px 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      display: flex; align-items: center; gap: 16px;
+    }
+    .sched-date { text-align: center; min-width: 48px; }
+    .sched-day { font-size: 24px; font-weight: 800; line-height: 1; }
+    .sched-month { font-size: 11px; color: #94a3b8; text-transform: uppercase; margin-top: 2px; }
+    .sched-divider { width: 1px; background: #e2e8f0; align-self: stretch; min-height: 40px; }
+    .sched-body { flex: 1; }
+    .sched-time { font-size: 13px; font-weight: 700; color: #f97316; }
+    .sched-who { font-size: 15px; font-weight: 700; }
+    .sched-where { font-size: 13px; color: #64748b; }
+    .sched-note { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .sched-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+
+    /* Filter bar */
+    .filter-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-bar input, .filter-bar select {
+      padding: 9px 13px; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 14px; background: white; outline: none;
+    }
+    .filter-bar input:focus, .filter-bar select:focus { border-color: #f97316; }
+    .filter-bar input { flex: 1; min-width: 160px; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5); z-index: 1000;
+      align-items: center; justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: white; border-radius: 16px; padding: 28px;
+      width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 5px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 10px 12px; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; font-size: 14px; outline: none; font-family: inherit;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #f97316; }
+    .form-group textarea { resize: vertical; min-height: 72px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    .btn-cancel-modal { padding: 10px 20px; background: #f1f5f9; color: #64748b; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    .btn-save-modal { padding: 10px 20px; background: #f97316; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-save-modal:hover { background: #ea6c0a; }
+
+    /* Loading */
+    .loading-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(255,255,255,0.9); z-index: 2000;
+      align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+    }
+    .loading-overlay.show { display: flex; }
+    .spinner {
+      width: 40px; height: 40px; border: 4px solid #f1f5f9;
+      border-top-color: #f97316; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 14px; color: #64748b; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #1e293b; color: white; padding: 12px 24px;
+      border-radius: 8px; font-size: 14px; opacity: 0;
+      transition: opacity 0.3s; z-index: 3000; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    @media (max-width: 600px) {
+      header { padding: 12px 16px; }
+      .form-row { grid-template-columns: 1fr; }
+      .stat-item { padding: 12px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="header-logo">💪</div>
+    <div>
+      <h1>健身教練管理系統</h1>
+      <div class="header-sub">課程排程 · 學員管理 · 收款追蹤</div>
+    </div>
+  </div>
+  <div class="header-date" id="header-date"></div>
+</header>
+
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-num" id="stat-today">—</div>
+    <div class="stat-label">今日課堂</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num" id="stat-week">—</div>
+    <div class="stat-label">本週課堂</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num" id="stat-unpaid">—</div>
+    <div class="stat-label">未付款學員</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num" id="stat-low">—</div>
+    <div class="stat-label">堂數快用完</div>
+  </div>
+</div>
+
+<main>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('today',this)">📅 今日行程</button>
+    <button class="tab-btn" onclick="switchTab('students',this)">👤 學員管理</button>
+    <button class="tab-btn" onclick="switchTab('schedule',this)">🗓 課程管理</button>
+  </div>
+
+  <!-- Tab 1: Today -->
+  <div class="tab-pane active" id="tab-today">
+    <div class="section-header">
+      <div class="section-title" id="today-title">今日行程</div>
+      <button class="btn-primary" onclick="openSessionModal()">＋ 新增課堂</button>
+    </div>
+    <div id="today-list" class="session-cards"></div>
+  </div>
+
+  <!-- Tab 2: Students -->
+  <div class="tab-pane" id="tab-students">
+    <div class="section-header">
+      <div class="section-title">學員管理</div>
+      <button class="btn-primary" onclick="openStudentModal()">＋ 新增學員</button>
+    </div>
+    <div class="filter-bar">
+      <input type="text" id="stu-search" placeholder="搜尋姓名、電話…" oninput="renderStudents()"/>
+      <select id="stu-filter" onchange="renderStudents()">
+        <option value="">全部學員</option>
+        <option value="unpaid">未付款</option>
+        <option value="low">堂數快用完（≤2）</option>
+      </select>
+    </div>
+    <div id="student-list" class="student-grid"></div>
+  </div>
+
+  <!-- Tab 3: Schedule -->
+  <div class="tab-pane" id="tab-schedule">
+    <div class="section-header">
+      <div class="section-title">課程管理</div>
+      <button class="btn-primary" onclick="openSessionModal()">＋ 新增課堂</button>
+    </div>
+    <div class="filter-bar">
+      <select id="sch-range" onchange="renderSchedule()">
+        <option value="upcoming">即將到來</option>
+        <option value="all">全部課程</option>
+        <option value="past">歷史記錄</option>
+      </select>
+      <select id="sch-student" onchange="renderSchedule()">
+        <option value="">全部學員</option>
+      </select>
+    </div>
+    <div id="schedule-list" class="schedule-list"></div>
+  </div>
+</main>
+
+<!-- Session Modal -->
+<div class="modal-overlay" id="modal-session">
+  <div class="modal">
+    <h2 id="session-modal-title">新增課堂</h2>
+    <div class="form-group">
+      <label>學員</label>
+      <select id="f-ses-student"></select>
+    </div>
+    <div class="form-group">
+      <label>教室</label>
+      <select id="f-ses-venue"></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>日期</label>
+        <input type="date" id="f-ses-date"/>
+      </div>
+      <div class="form-group">
+        <label>開始時間</label>
+        <input type="time" id="f-ses-start"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>結束時間（可選）</label>
+      <input type="time" id="f-ses-end"/>
+    </div>
+    <div class="form-group">
+      <label>備注</label>
+      <textarea id="f-ses-note" placeholder="課程重點、特別提醒…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel-modal" onclick="closeModal('modal-session')">取消</button>
+      <button class="btn-save-modal" onclick="saveSession()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Student Modal -->
+<div class="modal-overlay" id="modal-student">
+  <div class="modal">
+    <h2 id="student-modal-title">新增學員</h2>
+    <div class="form-group">
+      <label>姓名</label>
+      <input type="text" id="f-stu-name" placeholder="王小明"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>電話</label>
+        <input type="text" id="f-stu-phone" placeholder="0912-345-678"/>
+      </div>
+      <div class="form-group">
+        <label>LINE ID</label>
+        <input type="text" id="f-stu-line" placeholder="@example"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>備注（訓練目標、身體狀況…）</label>
+      <textarea id="f-stu-note" placeholder="例：增肌為主，有膝蓋舊傷需注意…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel-modal" onclick="closeModal('modal-student')">取消</button>
+      <button class="btn-save-modal" onclick="saveStudent()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Package Modal -->
+<div class="modal-overlay" id="modal-package">
+  <div class="modal">
+    <h2>新增購課記錄</h2>
+    <div class="form-group">
+      <label>學員</label>
+      <input type="text" id="f-pkg-stu-name" readonly style="background:#f8fafc;color:#64748b"/>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>購買堂數</label>
+        <select id="f-pkg-total">
+          <option value="5">5 堂</option>
+          <option value="10" selected>10 堂</option>
+          <option value="20">20 堂</option>
+          <option value="30">30 堂</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>金額（元）</label>
+        <input type="number" id="f-pkg-price" placeholder="例：6000"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>購買日期</label>
+        <input type="date" id="f-pkg-date"/>
+      </div>
+      <div class="form-group">
+        <label>付款狀態</label>
+        <select id="f-pkg-paid">
+          <option value="true">✅ 已付款</option>
+          <option value="false">❌ 未付款</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>備注（付款方式…）</label>
+      <textarea id="f-pkg-note" placeholder="例：現金付款、轉帳…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel-modal" onclick="closeModal('modal-package')">取消</button>
+      <button class="btn-save-modal" onclick="savePackage()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="loading-overlay show" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">連接雲端資料庫…</div>
+</div>
+<div id="toast"></div>
+
+<script>
+const { createClient } = supabase;
+const db = createClient(
+  'https://pstobgspnvxvpcwmdfkv.supabase.co',
+  'sb_publishable_ltCisjrJufmCwWqfo5PHTQ_mSYqCtpf'
+);
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const todayStr = () => new Date().toISOString().slice(0, 10);
+
+let students = [], venues = [], sessions = [], packages = [];
+let editingSessionId = null, editingStudentId = null, pkgStudentId = null;
+let toastTimer;
+
+function showLoading(on) { $('loading').classList.toggle('show', on); }
+function toast(msg, ms = 2500) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function getStudent(id) { return students.find(s => s.id === id); }
+function getVenue(id) { return venues.find(v => v.id === id); }
+
+function getActivePkg(studentId) {
+  return packages
+    .filter(p => p.student_id === studentId && p.remaining_sessions > 0)
+    .sort((a, b) => new Date(b.purchase_date) - new Date(a.purchase_date))[0] || null;
+}
+
+function getPkgInfo(studentId) {
+  const pkg = getActivePkg(studentId);
+  if (pkg) return { has: true, remaining: pkg.remaining_sessions, total: pkg.total_sessions, paid: pkg.paid, id: pkg.id };
+  const any = packages.filter(p => p.student_id === studentId);
+  if (any.length) return { has: true, remaining: 0, total: any[any.length - 1].total_sessions, paid: any[any.length - 1].paid };
+  return { has: false };
+}
+
+// ── Header ──
+function setHeader() {
+  const d = new Date();
+  const days = ['日','一','二','三','四','五','六'];
+  $('header-date').textContent = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} 週${days[d.getDay()]}`;
+}
+
+// ── Stats ──
+function updateStats() {
+  const today = todayStr();
+  const now = new Date();
+  const wStart = new Date(now); wStart.setDate(now.getDate() - now.getDay());
+  const wEnd   = new Date(now); wEnd.setDate(now.getDate() + (6 - now.getDay()));
+
+  const todayN = sessions.filter(s => s.date === today && s.status !== 'cancelled').length;
+  const weekN  = sessions.filter(s => {
+    const d = new Date(s.date); return d >= wStart && d <= wEnd && s.status !== 'cancelled';
+  }).length;
+  const unpaidN = students.filter(s => { const i = getPkgInfo(s.id); return i.has && !i.paid; }).length;
+  const lowN    = students.filter(s => { const i = getPkgInfo(s.id); return i.has && i.remaining > 0 && i.remaining <= 2; }).length;
+
+  $('stat-today').textContent = todayN;
+  $('stat-week').textContent  = weekN;
+  $('stat-unpaid').textContent = unpaidN;
+  $('stat-low').textContent   = lowN;
+}
+
+// ── Today ──
+function renderToday() {
+  const today = todayStr();
+  const d = new Date();
+  const days = ['日','一','二','三','四','五','六'];
+  $('today-title').textContent = `今日行程 — ${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} 週${days[d.getDay()]}`;
+
+  const list = sessions
+    .filter(s => s.date === today)
+    .sort((a, b) => (a.time_start||'').localeCompare(b.time_start||''));
+
+  if (!list.length) {
+    $('today-list').innerHTML = `<div class="empty-state"><div class="icon">😌</div><p>今天沒有課堂安排</p></div>`;
+    return;
+  }
+
+  const statusLabel = { scheduled: '待上課', completed: '已完成', cancelled: '已取消' };
+  const statusBadge = { scheduled: 'badge-scheduled', completed: 'badge-completed', cancelled: 'badge-cancelled' };
+
+  $('today-list').innerHTML = list.map(s => {
+    const stu = getStudent(s.student_id);
+    const ven = getVenue(s.venue_id);
+    const time = s.time_start ? (s.time_end ? `${s.time_start} – ${s.time_end}` : s.time_start) : '時間未定';
+    const actions = s.status === 'scheduled' ? `
+      <button class="btn-sm btn-complete" onclick="completeSession('${s.id}')">✓ 標記完成</button>
+      <button class="btn-sm btn-warn" onclick="cancelSession('${s.id}')">✕ 取消課堂</button>
+      <button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
+      <button class="btn-sm btn-muted" onclick="deleteSession('${s.id}')">刪除</button>
+    ` : `<button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
+         <button class="btn-sm btn-muted" onclick="deleteSession('${s.id}')">刪除</button>`;
+    return `<div class="session-card" data-status="${s.status}">
+      <div class="session-time">${esc(time)}</div>
+      <div class="session-student">${esc(stu?.name || '未知學員')}</div>
+      <div class="session-venue">📍 ${esc(ven?.name || '教室未設定')}</div>
+      ${s.note ? `<div class="session-note">${esc(s.note)}</div>` : ''}
+      <span class="badge ${statusBadge[s.status]||''}">${statusLabel[s.status]||s.status}</span>
+      <div class="session-actions">${actions}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Students ──
+function renderStudents() {
+  const q = $('stu-search').value.toLowerCase();
+  const f = $('stu-filter').value;
+  let list = students.filter(s => {
+    if (q && !s.name?.toLowerCase().includes(q) && !s.phone?.includes(q)) return false;
+    if (f === 'unpaid') { const i = getPkgInfo(s.id); return i.has && !i.paid; }
+    if (f === 'low')    { const i = getPkgInfo(s.id); return i.has && i.remaining > 0 && i.remaining <= 2; }
+    return true;
+  });
+
+  if (!list.length) {
+    $('student-list').innerHTML = `<div class="empty-state" style="padding:40px"><p>沒有符合條件的學員</p></div>`;
+    return;
+  }
+
+  $('student-list').innerHTML = list.map(s => {
+    const info = getPkgInfo(s.id);
+    const isUnpaid = info.has && !info.paid;
+    const isLow    = info.has && info.remaining > 0 && info.remaining <= 2;
+    const cardCls  = isUnpaid ? 'card-danger' : isLow ? 'card-warning' : '';
+    const badge    = isUnpaid ? '<span class="corner-badge corner-unpaid">未付款</span>'
+                   : isLow    ? '<span class="corner-badge corner-low">堂數快用完</span>' : '';
+
+    let pkgHtml = info.has
+      ? `<div class="pkg-box">
+           <div>
+             <span class="pkg-remaining">${info.remaining}</span>
+             <span class="pkg-total"> / ${info.total} 堂</span>
+             <div style="font-size:11px;color:#94a3b8;margin-top:2px">剩餘堂數</div>
+           </div>
+           <span class="pkg-paid-badge ${info.paid ? 'paid-yes' : 'paid-no'}">${info.paid ? '✅ 已付款' : '❌ 未付款'}</span>
+         </div>`
+      : `<div class="pkg-box pkg-none">尚未購課</div>`;
+
+    return `<div class="student-card ${cardCls}">
+      ${badge}
+      <div class="student-name">${esc(s.name)}</div>
+      <div class="student-phone">📞 ${esc(s.phone || '未填')}</div>
+      ${s.line_id ? `<div class="student-line">LINE ${esc(s.line_id)}</div>` : ''}
+      ${pkgHtml}
+      ${s.note ? `<div class="student-note">${esc(s.note)}</div>` : ''}
+      <div class="session-actions">
+        <button class="btn-sm btn-info" onclick="openStudentModal('${s.id}')">編輯</button>
+        <button class="btn-sm btn-complete" onclick="openPackageModal('${s.id}')">＋ 購課</button>
+        <button class="btn-sm btn-muted" onclick="deleteStudent('${s.id}')">刪除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Schedule ──
+function renderSchedule() {
+  const range = $('sch-range').value;
+  const stuId = $('sch-student').value;
+  const today = todayStr();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const statusLabel = { scheduled: '待上課', completed: '已完成', cancelled: '已取消' };
+  const statusBadge = { scheduled: 'badge-scheduled', completed: 'badge-completed', cancelled: 'badge-cancelled' };
+
+  let list = [...sessions];
+  if (range === 'upcoming') list = list.filter(s => s.date >= today);
+  if (range === 'past')     list = list.filter(s => s.date < today);
+  if (stuId) list = list.filter(s => s.student_id === stuId);
+  list.sort((a, b) => a.date.localeCompare(b.date) || (a.time_start||'').localeCompare(b.time_start||''));
+
+  if (!list.length) {
+    $('schedule-list').innerHTML = `<div class="empty-state" style="padding:40px"><p>沒有課程記錄</p></div>`;
+    return;
+  }
+
+  $('schedule-list').innerHTML = list.map(s => {
+    const stu = getStudent(s.student_id);
+    const ven = getVenue(s.venue_id);
+    const d   = new Date(s.date + 'T00:00:00');
+    const time = s.time_start ? (s.time_end ? `${s.time_start}–${s.time_end}` : s.time_start) : '—';
+    return `<div class="schedule-row">
+      <div class="sched-date">
+        <div class="sched-day">${d.getDate()}</div>
+        <div class="sched-month">${months[d.getMonth()]}</div>
+      </div>
+      <div class="sched-divider"></div>
+      <div class="sched-body">
+        <div class="sched-time">${esc(time)}</div>
+        <div class="sched-who">${esc(stu?.name || '未知學員')}</div>
+        <div class="sched-where">📍 ${esc(ven?.name || '教室未設定')}</div>
+        ${s.note ? `<div class="sched-note">${esc(s.note)}</div>` : ''}
+      </div>
+      <div class="sched-right">
+        <span class="badge ${statusBadge[s.status]||''}">${statusLabel[s.status]||s.status}</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm btn-info" onclick="openSessionModal('${s.id}')">編輯</button>
+          <button class="btn-sm btn-muted" onclick="deleteSession('${s.id}')">刪除</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Populate selects ──
+function populateSelects() {
+  const stuOpts = students.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  $('f-ses-student').innerHTML = `<option value="">— 選擇學員 —</option>` + stuOpts;
+  $('f-ses-venue').innerHTML   = venues.map(v => `<option value="${v.id}">${esc(v.name)}</option>`).join('');
+  $('sch-student').innerHTML   = `<option value="">全部學員</option>` + stuOpts;
+}
+
+// ── Tabs ──
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  $(`tab-${name}`).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Session modal ──
+function openSessionModal(id = null) {
+  editingSessionId = id;
+  $('session-modal-title').textContent = id ? '編輯課堂' : '新增課堂';
+  if (id) {
+    const s = sessions.find(x => x.id === id);
+    if (s) {
+      $('f-ses-student').value = s.student_id || '';
+      $('f-ses-venue').value   = s.venue_id || '';
+      $('f-ses-date').value    = s.date || todayStr();
+      $('f-ses-start').value   = s.time_start || '';
+      $('f-ses-end').value     = s.time_end || '';
+      $('f-ses-note').value    = s.note || '';
+    }
+  } else {
+    $('f-ses-student').value = '';
+    $('f-ses-venue').value   = venues[0]?.id || '';
+    $('f-ses-date').value    = todayStr();
+    $('f-ses-start').value   = '';
+    $('f-ses-end').value     = '';
+    $('f-ses-note').value    = '';
+  }
+  $('modal-session').classList.add('show');
+}
+
+async function saveSession() {
+  const studentId = $('f-ses-student').value;
+  const date      = $('f-ses-date').value;
+  if (!studentId || !date) { toast('請選擇學員和日期'); return; }
+  const data = {
+    student_id: studentId,
+    venue_id:   $('f-ses-venue').value || null,
+    date,
+    time_start: $('f-ses-start').value || null,
+    time_end:   $('f-ses-end').value   || null,
+    note:       $('f-ses-note').value  || null,
+  };
+  showLoading(true);
+  if (editingSessionId) {
+    const { error } = await db.from('gym_sessions').update(data).eq('id', editingSessionId);
+    if (!error) { const i = sessions.findIndex(s => s.id === editingSessionId); if (i !== -1) sessions[i] = { ...sessions[i], ...data }; toast('課堂已更新'); }
+  } else {
+    const id = 'ses-' + Date.now();
+    const { error } = await db.from('gym_sessions').insert({ id, ...data, status: 'scheduled' });
+    if (!error) { sessions.push({ id, ...data, status: 'scheduled' }); toast('課堂已新增'); }
+  }
+  showLoading(false);
+  closeModal('modal-session');
+  renderAll();
+}
+
+// ── Student modal ──
+function openStudentModal(id = null) {
+  editingStudentId = id;
+  $('student-modal-title').textContent = id ? '編輯學員資料' : '新增學員';
+  if (id) {
+    const s = students.find(x => x.id === id);
+    if (s) {
+      $('f-stu-name').value  = s.name  || '';
+      $('f-stu-phone').value = s.phone || '';
+      $('f-stu-line').value  = s.line_id || '';
+      $('f-stu-note').value  = s.note  || '';
+    }
+  } else {
+    $('f-stu-name').value = $('f-stu-phone').value = $('f-stu-line').value = $('f-stu-note').value = '';
+  }
+  $('modal-student').classList.add('show');
+}
+
+async function saveStudent() {
+  const name = $('f-stu-name').value.trim();
+  if (!name) { toast('請填寫學員姓名'); return; }
+  const data = {
+    name,
+    phone:   $('f-stu-phone').value.trim() || null,
+    line_id: $('f-stu-line').value.trim()  || null,
+    note:    $('f-stu-note').value.trim()  || null,
+  };
+  showLoading(true);
+  if (editingStudentId) {
+    const { error } = await db.from('gym_students').update(data).eq('id', editingStudentId);
+    if (!error) { const i = students.findIndex(s => s.id === editingStudentId); if (i !== -1) students[i] = { ...students[i], ...data }; toast('學員資料已更新'); }
+  } else {
+    const id = 'stu-' + Date.now();
+    const { error } = await db.from('gym_students').insert({ id, ...data });
+    if (!error) { students.push({ id, ...data }); toast('學員已新增'); }
+  }
+  showLoading(false);
+  closeModal('modal-student');
+  populateSelects();
+  renderAll();
+}
+
+// ── Package modal ──
+function openPackageModal(studentId) {
+  pkgStudentId = studentId;
+  const stu = getStudent(studentId);
+  $('f-pkg-stu-name').value = stu?.name || '';
+  $('f-pkg-total').value    = '10';
+  $('f-pkg-price').value    = '';
+  $('f-pkg-date').value     = todayStr();
+  $('f-pkg-paid').value     = 'true';
+  $('f-pkg-note').value     = '';
+  $('modal-package').classList.add('show');
+}
+
+async function savePackage() {
+  if (!pkgStudentId) return;
+  const total = parseInt($('f-pkg-total').value);
+  const data = {
+    student_id:         pkgStudentId,
+    total_sessions:     total,
+    remaining_sessions: total,
+    price:              parseInt($('f-pkg-price').value) || 0,
+    paid:               $('f-pkg-paid').value === 'true',
+    purchase_date:      $('f-pkg-date').value,
+    note:               $('f-pkg-note').value.trim() || null,
+  };
+  showLoading(true);
+  const id = 'pkg-' + Date.now();
+  const { error } = await db.from('gym_packages').insert({ id, ...data });
+  if (!error) { packages.push({ id, ...data }); toast('購課記錄已新增'); }
+  showLoading(false);
+  closeModal('modal-package');
+  renderAll();
+}
+
+// ── Actions ──
+async function completeSession(id) {
+  const s = sessions.find(x => x.id === id);
+  if (!s) return;
+  showLoading(true);
+  const { error } = await db.from('gym_sessions').update({ status: 'completed' }).eq('id', id);
+  if (!error) {
+    s.status = 'completed';
+    const pkg = getActivePkg(s.student_id);
+    if (pkg) {
+      const newR = pkg.remaining_sessions - 1;
+      await db.from('gym_packages').update({ remaining_sessions: newR }).eq('id', pkg.id);
+      pkg.remaining_sessions = newR;
+    }
+    toast('課堂已完成，堂數已扣除 1 堂');
+  }
+  showLoading(false);
+  renderAll();
+}
+
+async function cancelSession(id) {
+  if (!confirm('確定要取消這堂課？')) return;
+  showLoading(true);
+  const { error } = await db.from('gym_sessions').update({ status: 'cancelled' }).eq('id', id);
+  if (!error) { const s = sessions.find(x => x.id === id); if (s) s.status = 'cancelled'; toast('課堂已取消'); }
+  showLoading(false);
+  renderAll();
+}
+
+async function deleteSession(id) {
+  if (!confirm('確定要刪除這堂課？')) return;
+  showLoading(true);
+  const { error } = await db.from('gym_sessions').delete().eq('id', id);
+  if (!error) { sessions = sessions.filter(s => s.id !== id); toast('已刪除'); }
+  showLoading(false);
+  renderAll();
+}
+
+async function deleteStudent(id) {
+  if (!confirm('確定要刪除此學員？')) return;
+  showLoading(true);
+  const { error } = await db.from('gym_students').delete().eq('id', id);
+  if (!error) { students = students.filter(s => s.id !== id); toast('學員已刪除'); }
+  showLoading(false);
+  populateSelects();
+  renderAll();
+}
+
+function closeModal(id) { $(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(el =>
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); })
+);
+
+function renderAll() { updateStats(); renderToday(); renderStudents(); renderSchedule(); }
+
+// ── Init ──
+async function init() {
+  showLoading(true);
+  const [r1, r2, r3, r4] = await Promise.all([
+    db.from('gym_students').select('*').order('created_at'),
+    db.from('gym_venues').select('*').order('name'),
+    db.from('gym_sessions').select('*').order('date').order('time_start'),
+    db.from('gym_packages').select('*').order('purchase_date'),
+  ]);
+  students = r1.data || [];
+  venues   = r2.data || [];
+  sessions = r3.data || [];
+  packages = r4.data || [];
+  setHeader();
+  populateSelects();
+  renderAll();
+  showLoading(false);
+}
+
+init();
+</script>
+</body>
+</html>
